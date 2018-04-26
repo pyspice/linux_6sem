@@ -45,18 +45,11 @@ void run_shell(struct s_superblock* sb, int fd, struct s_inode* root)
         arg[len - i - 2] = 0;
 
         if (strncmp(cmd, "ls", len) == 0)
-        {
-            puts("ls");
             fs_ls(sb, fd, root);
-        }
         else if (strncmp(cmd, "mkdir", len) == 0)
-        {
-            puts("mkdir");
             fs_mkdir(sb, fd, root, arg);
-        }
         else if (strncmp(cmd, "cd", len) == 0)
         {
-            puts("cd");
             fs_cd(sb, fd, &root, arg);
         }
         else if (strncmp(cmd, "rm", len) == 0)
@@ -93,7 +86,9 @@ int main()
     inode_init(&root, 0, 0, "", 0);
     inode_read(root, sb, fd, sb->root_block * sb->block_size);
 
-    run_shell(sb, fd, root);
+    printf("%s\n", root->name);
+
+    //run_shell(sb, fd, root);
 
     superblock_del(sb);
     inode_del(root);

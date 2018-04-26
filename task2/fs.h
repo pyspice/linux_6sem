@@ -94,8 +94,7 @@ void fs_ls(struct s_superblock* sb, int fd, struct s_inode* node)
     for (i = 0; i < len; ++i)
     {
         inode_read(tmp, sb, fd, get_block_offset(sb, fd, node->blocks[i]));
-        printf("%d\n", strlen(tmp->name));
-        strncpy(ctime, asctime(tmp->ctime), strlen(ctime) - 1);
+        strncpy(ctime, asctime(tmp->ctime), 24);
         printf("\t%c %s %10d %s\n", tmp->type, ctime, tmp->size, tmp->name);
     }
 
@@ -107,8 +106,7 @@ void fs_ls(struct s_superblock* sb, int fd, struct s_inode* node)
         for (i = 0; i < node->nlast; ++i)
         {
             inode_read(tmp, sb, fd, get_block_offset(sb, fd, block[i]));
-            strncpy(ctime, asctime(tmp->ctime), 25);
-            ctime[strlen(ctime) - 1] = 0;
+            strncpy(ctime, asctime(tmp->ctime), 24);
             printf("\t%c %s %10d %s\n", tmp->type, ctime, tmp->size, tmp->name);
         }
 
