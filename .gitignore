@@ -1,0 +1,3 @@
+*.o
+fs_init
+fs_run
