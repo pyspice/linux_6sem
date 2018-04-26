@@ -10,14 +10,14 @@
 
 struct s_inode
 {
-    uint32_t blocks[12];
+    uint32_t* blocks;
     uint32_t iblock;
     uint32_t nlast;
 
     uint32_t ninode;
     uint32_t parent_inode;
 
-    char name[32];
+    char* name;
 
     uint32_t size;
 
@@ -33,6 +33,7 @@ void inode_init(struct s_inode** node,
                 char type)
 {
     (*node) = (struct s_inode*)malloc(sizeof(struct s_inode));
+    (*node)->blocks = (uint32_t*)malloc(12 * sizeof(uint32_t));
     memset((*node)->blocks, 0, 12 * sizeof(uint32_t));
     (*node)->iblock = 0;
     (*node)->nlast = 0;
@@ -40,7 +41,9 @@ void inode_init(struct s_inode** node,
     (*node)->ninode = ninode;
     (*node)->parent_inode = parent_inode;
 
-    strncpy((*node)->name, name, strlen(name));
+    int len = strlen(name);
+    (*node)->name = (char*)malloc(sizeof(char) * len);
+    strncpy((*node)->name, name, len);
 
     (*node)->size = 0;
 
@@ -52,6 +55,8 @@ void inode_init(struct s_inode** node,
 
 void inode_del(struct s_inode* node)
 {
+    free(node->blocks);
+    free(node->name);
     free(node);
 }
 

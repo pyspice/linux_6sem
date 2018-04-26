@@ -47,7 +47,10 @@ void fs_mkdir(struct s_superblock* sb, int fd, struct s_inode* parent, const cha
     inode_write(dir, sb, fd, offset);
 
     if (parent->iblock == 0 && parent->nlast < 12)
-        parent->blocks[parent->nlast++] = nblock;
+    {
+        parent->blocks[parent->nlast] = nblock;
+        ++(parent->nlast);
+    }
     else
     {
         uint32_t* block = (uint32_t*)malloc(sb->block_size);
@@ -64,7 +67,10 @@ void fs_mkdir(struct s_superblock* sb, int fd, struct s_inode* parent, const cha
             block[0] = nblock;
         }
         else
-            block[parent->nlast++] = nblock;
+        {
+            block[parent->nlast] = nblock;
+            ++(parent->nlast);
+        }
 
         pwrite(fd, block, sb->block_size, get_block_offset(sb, fd, parent->iblock));
         free(block);
@@ -88,9 +94,7 @@ void fs_ls(struct s_superblock* sb, int fd, struct s_inode* node)
     for (i = 0; i < len; ++i)
     {
         inode_read(tmp, sb, fd, get_block_offset(sb, fd, node->blocks[i]));
-        printf("%d\n", tmp->type);
-        printf("%d\n", tmp->size);
-        printf("%s\n", tmp->name);
+        printf("%d\n", strlen(tmp->name));
         strncpy(ctime, asctime(tmp->ctime), strlen(ctime) - 1);
         printf("\t%c %s %10d %s\n", tmp->type, ctime, tmp->size, tmp->name);
     }
