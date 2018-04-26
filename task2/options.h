@@ -1,0 +1,14 @@
+#ifndef OPTIONS_H_INCLUDED
+#define OPTIONS_H_INCLUDED
+
+#define SUPER_SIZE 28
+#define MAGIC 0xEF53
+
+#define BLOCKS_TOTAL 1048576
+#define BLOCK_SIZE 128
+
+#define INODE_SIZE
+
+
+
+#endif // OPTIONS_H_INCLUDED
