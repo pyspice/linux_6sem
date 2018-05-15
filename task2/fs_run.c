@@ -9,9 +9,9 @@
 
 void run_shell(struct s_superblock* sb, int fd, struct s_inode* root)
 {
-    uint8_t i, len;
-    char path[255] = "/";
-    char cmd[100], arg[100];
+    uint8_t i, j, len;
+    char path[2000] = "/";
+    char cmd[100], arg1[NAME_LEN], arg2[NAME_LEN];
 
     puts("MiniFS Shell. Supported commands:\n\
          \tls: display current directory content (with metadata)\n\
@@ -39,23 +39,47 @@ void run_shell(struct s_superblock* sb, int fd, struct s_inode* root)
             continue;
         }
 
-        strncpy(arg, cmd + i + 1, len - i);
-        len = strlen(cmd);
-        cmd[i] = 0;
-        arg[len - i - 2] = 0;
+        j = i;
+        for (++i; i < len && !isspace(cmd[i]); ++i);
+
+        strncpy(arg1, cmd + j + 1, i - j);
+        strncpy(arg2, cmd + i + 1, len - i);
+
+        arg1[i - j - 1] = 0;
+        arg2[len - i - 2] = 0;
+        cmd[j] = 0;
 
         if (strncmp(cmd, "ls", len) == 0)
             fs_ls(sb, fd, root);
         else if (strncmp(cmd, "mkdir", len) == 0)
-            fs_mkdir(sb, fd, root, arg);
+            fs_mkdir(sb, fd, root, arg1);
         else if (strncmp(cmd, "cd", len) == 0)
         {
-            fs_cd(sb, fd, &root, arg);
+            int found = fs_cd(sb, fd, root, arg1);
+
+            if (!found)
+                continue;
+
+            if (strncmp(arg1, "..", 2) == 0)
+            {
+                len = strlen(path) - 2;
+                if (len != -1)
+                {
+                    path[len + 1] = 0;
+                    for (; path[len] != '/'; --len)
+                        path[len] = 0;
+                }
+            }
+            else
+            {
+                strncpy(path + strlen(path), root->name, 32);
+                len = strlen(path);
+                path[len] = '/';
+                path[len + 1] = 0;
+            }
         }
         else if (strncmp(cmd, "rm", len) == 0)
-        {
-
-        }
+            fs_rm(sb, fd, root, arg1);
         else if (strncmp(cmd, "pull", len) == 0)
         {
 
@@ -71,7 +95,7 @@ void run_shell(struct s_superblock* sb, int fd, struct s_inode* root)
 
 int main()
 {
-    int fd = open("fs.img", O_RDWR);
+    int fd = open("fs", O_RDWR);
     if (fd == -1)
     {
         perror("cannot open fs.img file");
@@ -86,9 +110,9 @@ int main()
     inode_init(&root, 0, 0, "", 0);
     inode_read(root, sb, fd, sb->root_block * sb->block_size);
 
-    printf("%s\n", root->name);
+    run_shell(sb, fd, root);
 
-    //run_shell(sb, fd, root);
+    superblock_write(sb, fd);
 
     superblock_del(sb);
     inode_del(root);

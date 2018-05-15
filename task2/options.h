@@ -7,8 +7,4 @@
 #define BLOCKS_TOTAL 1048576
 #define BLOCK_SIZE 128
 
-#define INODE_SIZE
-
-
-
 #endif // OPTIONS_H_INCLUDED

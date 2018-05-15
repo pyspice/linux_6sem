@@ -1,6 +1,10 @@
 #ifndef UTILS_H_INCLUDED
 #define UTILS_H_INCLUDED
 
+#include "superblock.h"
+#include <stdio.h>
+#include <sys/stat.h>
+#include <fcntl.h>
 #include <stdint.h>
 #include <ctype.h>
 
@@ -12,9 +16,9 @@ uint8_t log2_ceil(uint32_t n)
     return i;
 }
 
-uint32_t get_block_offset(struct s_superblock* sb, int fd, uint32_t nblock)
+uint32_t get_block_offset(struct s_superblock* sb, uint32_t nblock)
 {
-    return (sb->root_block + nblock) * sizeof(sb->block_size);
+    return nblock * sb->block_size;
 }
 
 #define mod_base2(n, base2) (n & (base2 - 1))

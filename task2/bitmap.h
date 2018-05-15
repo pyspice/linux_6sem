@@ -94,6 +94,8 @@ void bitmap_set_unavailable(struct s_superblock* sb, int fd, uint32_t nblock)
     cell |= 1 << (BYTE - rest - 1);
 
     pwrite(fd, &cell, sizeof(uint8_t), offset);
+
+    --(sb->blocks_remain);
 }
 
 void bitmap_set_available(struct s_superblock* sb, int fd, uint32_t nblock)
@@ -107,6 +109,8 @@ void bitmap_set_available(struct s_superblock* sb, int fd, uint32_t nblock)
     cell &= ~(1 << (BYTE - rest - 1));
 
     pwrite(fd, &cell, sizeof(uint8_t), offset);
+
+    ++(sb->blocks_remain);
 }
 
 

@@ -10,6 +10,21 @@
 #include "utils.h"
 #include "fs.h"
 
+void fs_mkroot(struct s_superblock* sb, int fd)
+{
+    int32_t nblock = bitmap_get_available_block(sb, fd);
+
+    bitmap_set_unavailable(sb, fd, nblock);
+
+    struct s_inode* dir;
+    inode_init(&dir, nblock, 0, "/", 'd');
+
+    uint32_t offset = get_block_offset(sb, nblock);
+    inode_write(dir, sb, fd, offset);
+
+    inode_del(dir);
+}
+
 void flush_blocks(struct s_superblock* sb, int fd, uint32_t br, uint32_t pr)
 {
     uint8_t* buf = (uint8_t*)malloc(br * sizeof(uint8_t));
@@ -27,7 +42,7 @@ void flush_blocks(struct s_superblock* sb, int fd, uint32_t br, uint32_t pr)
 
 int main()
 {
-    int fd = open("fs.img", O_CREAT | O_RDWR, 0666);
+    int fd = open("fs", O_CREAT | O_RDWR, 0666);
     if (fd == -1)
     {
         perror("cannot create fs.img file");
@@ -40,7 +55,9 @@ int main()
     superblock_init(&sb, BLOCKS_TOTAL, BLOCKS_TOTAL - block_offset, BLOCK_SIZE, sizeof(struct s_inode), sizeof(struct s_superblock), block_offset, MAGIC);
 
     superblock_write(sb, fd);
+
     bitmap_write(fd, block_offset, BLOCKS_TOTAL);
+
     flush_blocks(sb, fd, sb->block_size - sizeof(struct s_superblock), sb->blocks_remain);
 
     fs_mkroot(sb, fd);

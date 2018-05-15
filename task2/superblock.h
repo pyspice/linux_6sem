@@ -47,12 +47,12 @@ void superblock_del(struct s_superblock* sb)
 
 void superblock_read(struct s_superblock* sb, int fd)
 {
-    read(fd, sb, sizeof(struct s_superblock));
+    pread(fd, sb, sizeof(struct s_superblock), 0);
 }
 
 void superblock_write(struct s_superblock* sb, int fd)
 {
-    write(fd, sb, sizeof(struct s_superblock));
+    pwrite(fd, sb, sizeof(struct s_superblock), 0);
 }
 
 #endif // SUPERBLOCK_H_INCLUDED
