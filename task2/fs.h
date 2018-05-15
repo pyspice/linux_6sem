@@ -69,7 +69,7 @@ uint32_t fs_find_ninode(struct s_superblock* sb, int fd, struct s_inode* node, c
     struct s_inode* tmp;
     inode_init(&tmp, 0, 0, "", '\0');
 
-    uint32_t i, nblock, len = (node->iblock ? 12 : node->nlast);
+    uint32_t i, nblock = 0, len = (node->iblock ? 12 : node->nlast);
     int not_found = 1;
     for (i = 0; (i < len) && not_found; ++i)
     {
@@ -91,7 +91,8 @@ uint32_t fs_find_ninode(struct s_superblock* sb, int fd, struct s_inode* node, c
         free(block);
     }
 
-    nblock = (not_found ? 0 : tmp->ninode);
+    if (not_found == 0)
+        nblock = tmp->ninode;
 
     inode_del(tmp);
 
@@ -119,9 +120,9 @@ void fs_mkdir(struct s_superblock* sb, int fd, struct s_inode* node, const char*
     }
 
     uint32_t nblock = fs_find_ninode(sb, fd, node, name);
-    if (nblock == 0)
+    if (nblock)
     {
-        puts("mkdir: cannot create directory: directory exists");
+        puts("mkdir: cannot create directory: object exists");
         return;
     }
 
@@ -199,7 +200,7 @@ uint32_t fs_cd(struct s_superblock* sb, int fd, struct s_inode* node, const char
     else if ((nblock = fs_find_ninode(sb, fd, node, name)) != 0)
         inode_read(tmp, sb, fd, get_block_offset(sb, nblock));
 
-    if (nblock == 0)
+    if (nblock == 0 || tmp->type != 'd')
         printf("cd: %s: no such directory\n", name);
     else
         inode_copy(node, tmp);
@@ -330,6 +331,8 @@ void fs_rm(struct s_superblock* sb, int fd, struct s_inode* node, const char* na
         else
             --(node->nlast);
 
+        inode_write(node, sb, fd, get_block_offset(sb, node->ninode));
+
         fs_update_ancestors_size(sb, fd, tmp, size);
     }
 
@@ -361,7 +364,7 @@ int fs_pull(struct s_superblock* sb, int fd, struct s_inode* node, const char* f
 
     if (fs_find_ninode(sb, fd, node, to))
     {
-        printf("pull: cannot pull file %s: file exists\n", to);
+        printf("pull: cannot pull file %s: object exists\n", to);
         return 0;
     }
 
@@ -401,14 +404,16 @@ int fs_pull(struct s_superblock* sb, int fd, struct s_inode* node, const char* f
     {
         nblock = bitmap_get_available_block(sb, fd);
         bitmap_set_unavailable(sb, fd, nblock);
+        printf("%d: %d\n", nblock, get_block_offset(sb, nblock));
 
         pwrite(fd, block, sb->block_size, get_block_offset(sb, nblock));
-        fs_add_ninode(sb, fd, node, nblock);
+        fs_add_ninode(sb, fd, tmp, nblock);
 
         bytes = read(ifd, block, sb->block_size);
     }
 
     inode_write(tmp, sb, fd, get_block_offset(sb, tblock));
+    inode_write(node, sb, fd, get_block_offset(sb, node->ninode));
 
     fs_update_ancestors_size(sb, fd, tmp, tmp->size);
 
@@ -428,56 +433,51 @@ uint32_t fs_push(struct s_superblock* sb, int fd, struct s_inode* node, const ch
     }
 
     uint32_t nblock = fs_find_ninode(sb, fd, node, from);
-    if (nblock == 0)
-    {
-        printf("push: cannot push file %s: file does not exist");
-        return 0;
-    }
-
-    int ofd = open(from, O_WRONLY);
-    if (ofd == -1)
-    {
-        printf("push: cannot open file %s", to);
-        return 0;
-    }
 
     struct s_inode* tmp;
-    inode_read(tmp, sb, fd, get_block_offset(sb, nblock));
+    inode_init(&tmp, 0, 0, "", 0);
+    if (nblock)
+        inode_read(tmp, sb, fd, get_block_offset(sb, nblock));
+
+    if (nblock == 0 || tmp->type != '-')
+    {
+        printf("push: cannot push file %s: file does not exist");
+        inode_del(tmp);
+        return 0;
+    }
+
+    int ofd = open(from, O_CREAT | O_WRONLY, 0666);
+    if (ofd == -1)
+    {
+        printf("push: cannot open file %s\n", to);
+        inode_del(tmp);
+        return 0;
+    }
 
     char* block = (char*)malloc(sb->block_size);
-    uint32_t i, size = tmp->size - sb->block_size, len = (node->iblock ? 12 : node->nlast);
-    for (i = 0; i < len && size > 0; ++i)
+    uint32_t i, len = (node->iblock ? 12 : node->nlast);
+    int32_t size = tmp->size - sb->block_size;
+    for (i = 0; (i < len) && (size > 0); ++i)
     {
         pread(fd, block, sb->block_size, get_block_offset(sb, tmp->blocks[i]));
-        write(fd, block, (size < sb->block_size ? size : sb->block_size));
+        write(ofd, block, (size < sb->block_size ? size : sb->block_size));
         size -= sb->block_size;
     }
 
-    if (tmp->iblock && size >= sb->block_size)
+    if (tmp->iblock && size > 0)
     {
         uint32_t* iblock = (uint32_t*)malloc(sb->block_size);
         pread(fd, iblock, sb->block_size, get_block_offset(sb, tmp->iblock));
 
-        for (i = 0; i < tmp->nlast && size >= sb->block_size; ++i)
+        for (i = 0; i < tmp->nlast && size > 0; ++i)
         {
-            pread(fd, block, sb->block_size, get_block_offset(iblock[i]));
-            write(fd, block, sb->block_size);
+            pread(fd, block, sb->block_size, get_block_offset(sb, iblock[i]));
+            write(ofd, block, (size < sb->block_size ? size : sb->block_size));
             size -= sb->block_size;
-        }
-
-        if (size)
-        {
-            pread(fd, block, size, get_block_offset(iblock[i]));
-            write(fd, block, size);
-            size = 0;
         }
 
         free(iblock);
     }
-
-    if ()
-
-
 
     inode_del(tmp);
     close(ofd);

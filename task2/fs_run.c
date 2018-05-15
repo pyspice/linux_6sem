@@ -81,13 +81,9 @@ void run_shell(struct s_superblock* sb, int fd, struct s_inode* root)
         else if (strncmp(cmd, "rm", len) == 0)
             fs_rm(sb, fd, root, arg1);
         else if (strncmp(cmd, "pull", len) == 0)
-        {
             fs_pull(sb, fd, root, arg1, arg2);
-        }
         else if (strncmp(cmd, "push", len) == 0)
-        {
-
-        }
+            fs_push(sb, fd, root, arg1, arg2);
         else
             puts("unknown command");
     }
