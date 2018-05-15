@@ -66,6 +66,12 @@ void fs_add_ninode(struct s_superblock* sb, int fd, struct s_inode* node, uint32
 
 void fs_mkdir(struct s_superblock* sb, int fd, struct s_inode* parent, const char* name)
 {
+    if (strlen(name) == 0)
+    {
+        puts("mkdir: empty directory name");
+        return;
+    }
+
     if ((sb->blocks_remain == 0) || (sb->blocks_remain == 1 && parent->blocks[11] != 0))
     {
         puts("mkdir: cannot create directory: no available space");
@@ -192,6 +198,12 @@ void fs_ls(struct s_superblock* sb, int fd, struct s_inode* node)
 
 int fs_cd(struct s_superblock* sb, int fd, struct s_inode* node, const char* name)
 {
+    if (strlen(name) == 0)
+    {
+        puts("cd: empty directory name");
+        return 0;
+    }
+
     int up = strncmp(name, "..", 2);
     if (up == 0 && node->parent_inode == 0)
         return 1;
@@ -257,6 +269,12 @@ void fs_erase_file(struct s_superblock* sb, int fd, struct s_inode* node)
 
 void fs_rm(struct s_superblock* sb, int fd, struct s_inode* node, const char* name)
 {
+    if (strlen(name) == 0)
+    {
+        puts("rm: empty object name");
+        return;
+    }
+
     struct s_inode* tmp;
     inode_init(&tmp, 0, 0, "", '\0');
 
@@ -340,7 +358,7 @@ void fs_rm(struct s_superblock* sb, int fd, struct s_inode* node, const char* na
     }
 
     if (not_found)
-        printf("rm: %s: no such directory\n", name);
+        printf("rm: %s: no such object\n", name);
     else
     {
         if (node->iblock && node->nlast == 1)
@@ -375,10 +393,16 @@ uint32_t fs_get_available_file_space(struct s_superblock* sb)
 
 int fs_pull(struct s_superblock* sb, int fd, struct s_inode* node, const char* from, const char* to)
 {
+    if (strlen(from) == 0 || strlen(to) == 0)
+    {
+        puts("pull: empty file name");
+        return 0;
+    }
+
     int ifd = open(from, O_RDONLY);
     if (ifd == -1)
     {
-        fprintf(stderr, "pull: cannot open %s file", from);
+        printf("pull: cannot open %s file", from);
         return 0;
     }
 
@@ -389,19 +413,20 @@ int fs_pull(struct s_superblock* sb, int fd, struct s_inode* node, const char* f
     if (st.st_size > space)
     {
         if (st.st_size > (sb->block_size / sizeof(uint32_t) + 12) * sb->block_size)
-            perror("pull: cannot pull file: file too large");
+            puts("pull: cannot pull file: file too large");
         else
-            perror("pull: cannot pull file: no available space");
+            puts("pull: cannot pull file: no available space");
         close(ifd);
         return 0;
     }
 
-    uint32_t nblock = bitmap_get_available_block(sb, fd);
-    bitmap_set_unavailable(sb, fd, nblock);
-    --(sb->blocks_remain);
+    uint32_t nblock, tblock = bitmap_get_available_block(sb, fd);
+    bitmap_set_unavailable(sb, fd, tblock);
 
     struct s_inode* tmp;
-    inode_init(&tmp, nblock, node->ninode, to, '-');
+    inode_init(&tmp, tblock, node->ninode, to, '-');
+
+    fs_add_ninode(sb, fd, node, tblock);
 
     char* block = (char*)malloc(sb->block_size);
 
@@ -428,7 +453,6 @@ int fs_pull(struct s_superblock* sb, int fd, struct s_inode* node, const char* f
             nblock = bitmap_get_available_block(sb, fd);
             bitmap_set_unavailable(sb, fd, nblock);
 
-            pwrite(fd, block, sb->block_size, get_block_offset(sb, nblock));
             iblock[i] = nblock;
 
             bytes = read(ifd, block, sb->block_size);
@@ -447,17 +471,25 @@ int fs_pull(struct s_superblock* sb, int fd, struct s_inode* node, const char* f
     tmp->nlast = nlast;
     tmp->size += st.st_size;
 
+    tmp->parent_inode = node->ninode;
     fs_update_ancestors_size(sb, fd, tmp, tmp->size);
+
+    inode_write(tmp, sb, fd, get_block_offset(sb, tblock));
 
     free(block);
     close(ifd);
+    inode_del(tmp);
 
     return 1;
 }
 
 int fs_push(struct s_superblock* sb, int fd, struct s_inode* node, const char* from, const char* to)
 {
-
+    if (strlen(from) == 0 || strlen(to) == 0)
+    {
+        puts("push: empty file name");
+        return 0;
+    }
 }
 
 #endif // FS_H_INCLUDED
