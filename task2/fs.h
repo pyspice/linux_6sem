@@ -39,14 +39,15 @@ void fs_add_ninode(struct s_superblock* sb, int fd, struct s_inode* node, uint32
     }
     else
     {
+        uint32_t offset;
         uint32_t* block = (uint32_t*)malloc(sb->block_size);
-        uint32_t offset = get_block_offset(sb, node->iblock);
-        pread(fd, block, sb->block_size, offset);
 
         if (node->iblock == 0)
         {
             uint32_t iblock = bitmap_get_available_block(sb, fd);
             bitmap_set_unavailable(sb, fd, iblock);
+
+            offset = get_block_offset(sb, iblock);
 
             node->iblock = iblock;
             node->nlast = 1;
@@ -55,6 +56,9 @@ void fs_add_ninode(struct s_superblock* sb, int fd, struct s_inode* node, uint32
         }
         else
         {
+            offset = get_block_offset(sb, node->iblock);
+            pread(fd, block, sb->block_size, offset);
+
             block[node->nlast] = nblock;
             ++(node->nlast);
         }
@@ -371,7 +375,7 @@ int fs_pull(struct s_superblock* sb, int fd, struct s_inode* node, const char* f
     int ifd = open(from, O_RDONLY);
     if (ifd == -1)
     {
-        printf("pull: cannot open file %s", from);
+        printf("pull: cannot open file %s\n", from);
         return 0;
     }
 
@@ -382,9 +386,9 @@ int fs_pull(struct s_superblock* sb, int fd, struct s_inode* node, const char* f
     if (st.st_size > space)
     {
         if (st.st_size > (sb->block_size / sizeof(uint32_t) + 12) * sb->block_size)
-            printf("pull: cannot pull file %s: file too large", from);
+            printf("pull: cannot pull file %s: file too large\n", from);
         else
-            printf("pull: cannot pull file %s: no available space", from);
+            printf("pull: cannot pull file %s: no available space\n", from);
         close(ifd);
         return 0;
     }
@@ -404,9 +408,8 @@ int fs_pull(struct s_superblock* sb, int fd, struct s_inode* node, const char* f
     {
         nblock = bitmap_get_available_block(sb, fd);
         bitmap_set_unavailable(sb, fd, nblock);
-        printf("%d: %d\n", nblock, get_block_offset(sb, nblock));
 
-        pwrite(fd, block, sb->block_size, get_block_offset(sb, nblock));
+        pwrite(fd, block, bytes, get_block_offset(sb, nblock));
         fs_add_ninode(sb, fd, tmp, nblock);
 
         bytes = read(ifd, block, sb->block_size);
@@ -441,7 +444,7 @@ uint32_t fs_push(struct s_superblock* sb, int fd, struct s_inode* node, const ch
 
     if (nblock == 0 || tmp->type != '-')
     {
-        printf("push: cannot push file %s: file does not exist");
+        printf("push: cannot push file %s: file does not exist\n");
         inode_del(tmp);
         return 0;
     }
@@ -455,7 +458,7 @@ uint32_t fs_push(struct s_superblock* sb, int fd, struct s_inode* node, const ch
     }
 
     char* block = (char*)malloc(sb->block_size);
-    uint32_t i, len = (node->iblock ? 12 : node->nlast);
+    uint32_t i, len = (tmp->iblock ? 12 : tmp->nlast);
     int32_t size = tmp->size - sb->block_size;
     for (i = 0; (i < len) && (size > 0); ++i)
     {
