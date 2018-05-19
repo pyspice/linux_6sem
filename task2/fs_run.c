@@ -28,7 +28,7 @@ void run_shell(struct s_superblock* sb, int fd, struct s_inode* root)
         printf("%s$ ", path);
         fgets(cmd, 100, stdin);
         len = strlen(cmd);
-        if (strncmp(cmd, "exit", len - 1) == 0)
+        if (strncmp(cmd, "exit", len - 1) == 0 && len == 5)
             break;
 
         for (i = 0; i < len && !isspace(cmd[i]); ++i);
@@ -108,7 +108,7 @@ int main()
 
     run_shell(sb, fd, root);
 
-    superblock_write(sb, fd);
+    pwrite(fd, sb, sizeof(struct s_superblock), 0);
 
     superblock_del(sb);
     inode_del(root);

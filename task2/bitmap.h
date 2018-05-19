@@ -79,8 +79,6 @@ uint32_t bitmap_get_available_block(struct s_superblock* sb, int fd)
                 if (!get8_bit(buf[i], j))
                     return ((k - sizeof(struct s_superblock) + i) << 3) + j;
     }
-
-    assert(0);
 }
 
 void bitmap_set_unavailable(struct s_superblock* sb, int fd, uint32_t nblock)

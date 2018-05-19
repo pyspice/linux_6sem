@@ -12,7 +12,7 @@
 #include <stdlib.h>
 #include <string.h>
 
-void fs_update_ancestors_size(struct s_superblock* sb, int fd, struct s_inode* node, uint32_t size)
+void fs_update_ancestors_size(struct s_superblock* sb, int fd, struct s_inode* node, int32_t size)
 {
     struct s_inode* tmp;
     inode_init(&tmp, 0, 0, "", 0);
@@ -111,13 +111,13 @@ void fs_mkdir(struct s_superblock* sb, int fd, struct s_inode* node, const char*
         return;
     }
 
-    if ((sb->blocks_remain == 0) || (sb->blocks_remain == 1 && node->blocks[11] != 0))
+    if ((sb->blocks_remain == 0) || (sb->blocks_remain == 1 && node->nlast == 12 && node->iblock == 0))
     {
         puts("mkdir: cannot create directory: no available space");
         return;
     }
 
-    if (node->iblock != 0 && node->nlast == sb->block_size >> 5)
+    if (node->iblock != 0 && node->nlast == sb->block_size / sizeof(uint32_t))
     {
         puts("mkdir: cannot create directory: max number of subdirectories/files reached");
         return;
@@ -131,6 +131,7 @@ void fs_mkdir(struct s_superblock* sb, int fd, struct s_inode* node, const char*
     }
 
     nblock = bitmap_get_available_block(sb, fd);
+    printf("%d\n", nblock);
     bitmap_set_unavailable(sb, fd, nblock);
 
     struct s_inode* dir;
@@ -205,7 +206,10 @@ uint32_t fs_cd(struct s_superblock* sb, int fd, struct s_inode* node, const char
         inode_read(tmp, sb, fd, get_block_offset(sb, nblock));
 
     if (nblock == 0 || tmp->type != 'd')
+    {
         printf("cd: %s: no such directory\n", name);
+        nblock = 0;
+    }
     else
         inode_copy(node, tmp);
 
@@ -222,6 +226,7 @@ void fs_erase_file(struct s_superblock* sb, int fd, struct s_inode* node)
 
     if (node->iblock)
     {
+        bitmap_set_available(sb, fd, node->iblock);
         uint32_t* block = (uint32_t*)malloc(sb->block_size);
 
         pread(fd, block, sb->block_size, get_block_offset(sb, node->iblock));
@@ -243,101 +248,72 @@ void fs_rm(struct s_superblock* sb, int fd, struct s_inode* node, const char* na
     struct s_inode* tmp;
     inode_init(&tmp, 0, 0, "", '\0');
 
-    int not_found = 1;
-    char deleted = 0;
-    uint32_t size, i, len = (node->iblock ? 12 : node->nlast);
-    for (i = 0; (i < len) && not_found; ++i)
+    uint32_t nblock = fs_find_ninode(sb, fd, node, name);
+    if (nblock == 0)
+        printf("rm: %s: no such object\n", name);
+    else
     {
-        inode_read(tmp, sb, fd, get_block_offset(sb, node->blocks[i]));
-        not_found = strncmp(tmp->name, name, 32);
-    }
+        inode_read(tmp, sb, fd, get_block_offset(sb, nblock));
 
-    if (not_found == 0)
-    {
-        if (tmp->type == 'd' && tmp->size > sb->inode_size)
+        if (tmp->type == '-')
+            fs_erase_file(sb, fd, tmp);
+        else if (tmp->nlast != 0)
         {
             puts("rm: cannot remove directory: directory is not empty");
             inode_del(tmp);
             return;
         }
 
-        size = -(tmp->size);
+        bitmap_set_available(sb, fd, nblock);
 
-        if (tmp->type == '-')
-            fs_erase_file(sb, fd, tmp);
+        uint32_t i, offset, len = (node->iblock ? 12 : node->nlast);
+        for (i = 0; i < len && node->blocks[i] != nblock; ++i);
 
-        bitmap_set_available(sb, fd, get_block_offset(sb, tmp->ninode));
-
-        for (--i; i < len - 1; ++i)
-            node->blocks[i] = node->blocks[i + 1];
-
-        deleted = 1;
-    }
-
-    if (node->iblock)
-    {
-        uint32_t* block = (uint32_t*)malloc(sb->block_size);
-        uint32_t offset = get_block_offset(sb, node->iblock);
-        pread(fd, block, sb->block_size, offset);
-
-        if (not_found)
+        uint32_t* block;
+        if (node->iblock)
         {
-            for (i = 0; (i < node->nlast) && not_found; ++i)
+            block = (uint32_t*)malloc(sb->block_size);
+            offset = get_block_offset(sb, node->iblock);
+            pread(fd, block, sb->block_size, offset);
+        }
+
+        if (i == len)
+        {
+            for (i = 0; i < node->nlast && block[i] != nblock; ++i);
+            for (; i < node->nlast - 1; ++i)
+                block[i] = block[i + 1];
+        }
+        else
+        {
+            for (; i < len - 1; ++i)
+                node->blocks[i] = node->blocks[i + 1];
+
+            if (node->iblock)
             {
-                inode_read(tmp, sb, fd, get_block_offset(sb, block[i]));
-                not_found = strncmp(tmp->name, name, 32);
-            }
-
-            if (not_found == 0)
-            {
-                if (tmp->type == 'd' && tmp->size > sb->inode_size)
-                {
-                    puts("rm: cannot remove directory: directory is not empty");
-                    inode_del(tmp);
-                    free(block);
-                    return;
-                }
-
-                size = -(tmp->size);
-
-                if (tmp->type == '-')
-                    fs_erase_file(sb, fd, tmp);
-
-                bitmap_set_available(sb, fd, get_block_offset(sb, tmp->ninode));
-
-                for (--i; i < len - 1; ++i)
+                node->blocks[11] = block[0];
+                for (i = 0; i < node->nlast; ++i)
                     block[i] = block[i + 1];
             }
         }
-        else if (deleted)
+
+        --(node->nlast);
+
+        if (node->iblock)
         {
-            node->blocks[11] = block[0];
-
-            for (i = 0; i < node->nlast - 1; ++i)
-                block[i] = block[i + 1];
+            if (node->nlast == 0)
+            {
+                bitmap_set_available(sb, fd, node->iblock);
+                node->iblock = 0;
+                node->nlast = 12;
+            }
+            else
+                pwrite(fd, block, sb->block_size, offset);
+            free(block);
         }
-
-        pwrite(fd, block, sb->block_size, offset);
-
-        free(block);
-    }
-
-    if (not_found)
-        printf("rm: %s: no such object\n", name);
-    else
-    {
-        if (node->iblock && node->nlast == 1)
-        {
-            bitmap_set_available(sb, fd, node->iblock);
-            node->iblock = 0;
-            node->nlast = 12;
-        }
-        else
-            --(node->nlast);
 
         inode_write(node, sb, fd, get_block_offset(sb, node->ninode));
 
-        fs_update_ancestors_size(sb, fd, tmp, size);
+        fs_update_ancestors_size(sb, fd, tmp, -(tmp->size));
     }
 
     inode_del(tmp);
